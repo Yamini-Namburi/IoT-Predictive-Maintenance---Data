@@ -103,3 +103,30 @@ Enables analysis like:
 
 “Vibration trends in the 24 hours before a failure event.”
 
+
+Physical Data Model
+
+Fact Tables
+
+fact_sensor_reading – main analytical table storing hourly aggregated readings per machine × sensor.
+
+Uses DISTKEY(machine_sk) to colocate data by machine and a compound SORTKEY(machine_sk, date_sk, time_sk) to speed up date-range queries .
+
+fact_maintenance_event – logs scheduled and unscheduled maintenance with timestamps and duration.
+
+fact_out_of_tolerance_alert – factless table recording every time a machine’s sensor reading exceeded its tolerance range.
+
+Dimension Tables
+
+
+Include machine, sensor, location, date, and time-of-day metadata.
+
+Small dimensions use DISTSTYLE ALL so copies exist on every node, enabling local joins with large facts.
+
+Encoding & Compression
+
+AZ64 for numeric and timestamp columns (compact, fast arithmetic).
+
+BYTEDICT for low-cardinality fields (e.g., event type, part of day).
+
+ZSTD for text columns (titles, IDs) to minimize storage cost.
