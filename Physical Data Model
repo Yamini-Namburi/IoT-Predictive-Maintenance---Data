@@ -1,0 +1,108 @@
+CREATE SCHEMA IF NOT EXISTS innovate_mfg_iot;
+SET search_path TO innovate_mfg_iot;
+CREATE TABLE dim_machine (
+    machine_sk            BIGINT IDENTITY(1,1) PRIMARY KEY,
+    machine_id            VARCHAR(64) NOT NULL ENCODE ZSTD,
+    machine_type          VARCHAR(64) ENCODE BYTEDICT,
+    installation_date     DATE ENCODE AZ64,
+    normal_temp_min       FLOAT ENCODE AZ64,
+    normal_temp_max       FLOAT ENCODE AZ64,
+    normal_vibration_max  FLOAT ENCODE AZ64,
+    location_sk           BIGINT NOT NULL
+)
+DISTSTYLE ALL
+SORTKEY (machine_id);
+CREATE TABLE dim_sensor (
+    sensor_sk      BIGINT IDENTITY(1,1) PRIMARY KEY,
+    sensor_id      VARCHAR(64) NOT NULL ENCODE ZSTD,
+    sensor_type    VARCHAR(32) ENCODE BYTEDICT,
+    unit           VARCHAR(16) ENCODE BYTEDICT,
+    tolerance_min  FLOAT ENCODE AZ64,
+    tolerance_max  FLOAT ENCODE AZ64
+)
+DISTSTYLE ALL
+SORTKEY (sensor_id);
+CREATE TABLE dim_location (
+    location_sk   BIGINT IDENTITY(1,1) PRIMARY KEY,
+    factory_id    VARCHAR(64) NOT NULL ENCODE ZSTD,
+    factory_name  VARCHAR(128) ENCODE ZSTD,
+    area_id       VARCHAR(64) NOT NULL ENCODE ZSTD,
+    area_name     VARCHAR(128) ENCODE ZSTD,
+    country       VARCHAR(64) ENCODE BYTEDICT
+)
+DISTSTYLE ALL
+SORTKEY (factory_id, area_id);
+CREATE TABLE dim_date (
+    date_sk     INT PRIMARY KEY,
+    full_date   DATE NOT NULL ENCODE AZ64,
+    year        SMALLINT ENCODE AZ64,
+    month       SMALLINT ENCODE AZ64,
+    day         SMALLINT ENCODE AZ64,
+    is_weekend  BOOLEAN ENCODE BYTEDICT
+)
+DISTSTYLE ALL
+SORTKEY (full_date);
+CREATE TABLE dim_time_of_day (
+    time_sk      INT PRIMARY KEY,
+    hour         SMALLINT ENCODE AZ64,
+    minute       SMALLINT ENCODE AZ64,
+    part_of_day  VARCHAR(16) ENCODE BYTEDICT
+)
+DISTSTYLE ALL
+SORTKEY (time_sk);
+CREATE TABLE fact_sensor_reading (
+    machine_sk            BIGINT NOT NULL,
+    sensor_sk             BIGINT NOT NULL,
+    location_sk           BIGINT NOT NULL,
+    date_sk               INT NOT NULL,
+    time_sk               INT NOT NULL,
+    avg_temperature       FLOAT ENCODE AZ64,
+    max_temperature       FLOAT ENCODE AZ64,
+    min_temperature       FLOAT ENCODE AZ64,
+    avg_vibration         FLOAT ENCODE AZ64,
+    max_vibration         FLOAT ENCODE AZ64,
+    min_vibration         FLOAT ENCODE AZ64,
+    avg_pressure          FLOAT ENCODE AZ64,
+    avg_rotation_speed    FLOAT ENCODE AZ64,
+    out_of_tolerance_count INT ENCODE AZ64,
+
+    CONSTRAINT fk_fsr_machine   FOREIGN KEY (machine_sk)  REFERENCES dim_machine(machine_sk),
+    CONSTRAINT fk_fsr_sensor    FOREIGN KEY (sensor_sk)   REFERENCES dim_sensor(sensor_sk),
+    CONSTRAINT fk_fsr_location  FOREIGN KEY (location_sk) REFERENCES dim_location(location_sk),
+    CONSTRAINT fk_fsr_date      FOREIGN KEY (date_sk)     REFERENCES dim_date(date_sk),
+    CONSTRAINT fk_fsr_time      FOREIGN KEY (time_sk)     REFERENCES dim_time_of_day(time_sk)
+)
+DISTSTYLE KEY
+DISTKEY (machine_sk)
+COMPOUND SORTKEY (machine_sk, date_sk, time_sk);
+CREATE TABLE fact_maintenance_event (
+    event_id              BIGINT IDENTITY(1,1) PRIMARY KEY,
+    machine_sk            BIGINT NOT NULL,
+    date_sk               INT NOT NULL,
+    event_type            VARCHAR(32) ENCODE BYTEDICT,
+    event_start_ts        TIMESTAMP ENCODE AZ64,
+    event_end_ts          TIMESTAMP ENCODE AZ64,
+    parts_replaced_count  INT ENCODE AZ64,
+    event_duration_hours  FLOAT ENCODE AZ64,
+
+    CONSTRAINT fk_fme_machine FOREIGN KEY (machine_sk) REFERENCES dim_machine(machine_sk),
+    CONSTRAINT fk_fme_date    FOREIGN KEY (date_sk)    REFERENCES dim_date(date_sk)
+)
+DISTSTYLE KEY
+DISTKEY (machine_sk)
+SORTKEY (event_start_ts);
+CREATE TABLE fact_out_of_tolerance_alert (
+    machine_sk   BIGINT NOT NULL,
+    sensor_sk    BIGINT NOT NULL,
+    date_sk      INT NOT NULL,
+    time_sk      INT NOT NULL,
+    alert_type   VARCHAR(32) ENCODE BYTEDICT,
+    alert_ts     TIMESTAMP ENCODE AZ64,
+
+    CONSTRAINT fk_fot_machine FOREIGN KEY (machine_sk) REFERENCES dim_machine(machine_sk),
+    CONSTRAINT fk_fot_sensor  FOREIGN KEY (sensor_sk)  REFERENCES dim_sensor(sensor_sk),
+    CONSTRAINT fk_fot_date    FOREIGN KEY (date_sk)    REFERENCES dim_date(date_sk)
+)
+DISTSTYLE KEY
+DISTKEY (machine_sk)
+SORTKEY (machine_sk, alert_ts);
